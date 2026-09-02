@@ -11,7 +11,7 @@ Connect to a server you host, or `https://demo.hedgedoc.org`. The app asks `/api
 
 ## Install
 
-[Download the latest APK](https://github.com/Amnibro/hedgedoc-android/releases/latest). Two files:
+[Download the latest APK](https://github.com/Amnibro/hedgedoc-android/releases/latest), or the same links from [amni-scient.com/amni-hedgedoc](https://amni-scient.com/amni-hedgedoc.html). Two files:
 
 - **signed** — installable sideload. Signed with the Android debug certificate, so Play Protect may warn. Package `org.hedgedoc.android`.
 - **unsigned** — same release build, no signature. Sign it with your own key if you want.
