@@ -20,8 +20,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
-import org.hedgedoc.android.ui.theme.Mist
-import org.hedgedoc.android.ui.theme.NightPane
+import org.hedgedoc.android.ui.theme.LocalScient
 
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,17 +30,18 @@ fun LiveEditorScreen(
     cookieHeader: String,
     onBack: () -> Unit,
 ) {
+    val pal = LocalScient.current
     Scaffold(
-        containerColor = NightPane,
+        containerColor = pal.bg,
         topBar = {
             TopAppBar(
-                title = { Text("Live editor", color = Mist) },
+                title = { Text("Live editor", color = pal.text) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Mist)
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = pal.text)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NightPane),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = pal.bg),
             )
         },
     ) { padding ->

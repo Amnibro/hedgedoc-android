@@ -18,8 +18,7 @@ import io.noties.markwon.image.coil.CoilImagesPlugin
 import io.noties.markwon.image.destination.ImageDestinationProcessorRelativeToAbsolute
 import io.noties.markwon.linkify.LinkifyPlugin
 import okhttp3.OkHttpClient
-import org.hedgedoc.android.ui.theme.Ink
-import org.hedgedoc.android.ui.theme.InkMute
+import org.hedgedoc.android.ui.theme.LocalScient
 
 @Composable
 fun MarkdownPane(
@@ -27,9 +26,10 @@ fun MarkdownPane(
     baseUrl: String,
     http: OkHttpClient,
     modifier: Modifier = Modifier,
-    textColor: Int = Ink.toArgb(),
+    textColor: Int = LocalScient.current.paperInk.toArgb(),
 ) {
     val context = LocalContext.current
+    val pal = LocalScient.current
     val markwon = remember(baseUrl, http) {
         val loader = ImageLoader.Builder(context)
             .okHttpClient(http)
@@ -56,7 +56,7 @@ fun MarkdownPane(
                 setTextColor(textColor)
                 textSize = 16.5f
                 setLineSpacing(0f, 1.28f)
-                setLinkTextColor(InkMute.toArgb())
+                setLinkTextColor(pal.textSoft.toArgb())
             }
         },
         update = { view ->

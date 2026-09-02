@@ -22,33 +22,35 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.hedgedoc.android.data.HedgeEdition
 import org.hedgedoc.android.data.Session
-import org.hedgedoc.android.ui.theme.Blot
-import org.hedgedoc.android.ui.theme.Mist
-import org.hedgedoc.android.ui.theme.NightPane
-import org.hedgedoc.android.ui.theme.Stake
+import org.hedgedoc.android.ui.components.ThemePicker
+import org.hedgedoc.android.ui.theme.LocalScient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     session: Session,
     serverStatus: String,
+    themeId: String,
+    onTheme: (String) -> Unit,
     onBack: () -> Unit,
     onLoadStatus: () -> Unit,
     onLogout: () -> Unit,
 ) {
+    val pal = LocalScient.current
     LaunchedEffect(session.serverUrl) { onLoadStatus() }
     Scaffold(
-        containerColor = NightPane,
+        containerColor = pal.bg,
         topBar = {
             TopAppBar(
-                title = { Text("Server", color = Mist) },
+                title = { Text("Server", color = pal.text) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Mist)
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = pal.text)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NightPane),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = pal.bg),
             )
         },
     ) { padding ->
@@ -61,21 +63,28 @@ fun SettingsScreen(
         ) {
             LabelValue("Signed in as", session.profile.name.ifBlank { session.email.ifBlank { "Guest" } })
             LabelValue("Server", session.serverUrl.trimEnd('/'))
+            LabelValue("HedgeDoc", if (session.edition == HedgeEdition.V2) "2" else "1.x")
             LabelValue("Method", session.authMethod)
             if (serverStatus.isNotBlank()) LabelValue("Status", serverStatus)
+            Text("Theme", style = MaterialTheme.typography.labelSmall, color = pal.textSoft)
+            ThemePicker(selectedId = themeId, onSelect = onTheme)
             Text(
-                "New notes use POST /new. Saving an existing note replaces the whole document over Socket.IO. If someone else is typing in it, your save can overwrite them. Live editor opens the real HedgeDoc page.",
+                if (session.edition == HedgeEdition.V2) {
+                    "HedgeDoc 2 saves over REST (PUT /api/v2/notes). Live editor opens /n/… with your session cookie."
+                } else {
+                    "New notes use POST /new. Saving an existing note replaces the whole document over Socket.IO. If someone else is typing in it, your save can overwrite them. Live editor opens the real HedgeDoc page."
+                },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Stake,
+                color = pal.textSoft,
             )
             Text(
                 "This is an unofficial client. HedgeDoc is AGPL. The HedgeDoc logo is not included.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Stake,
+                color = pal.textSoft,
             )
             Button(
                 onClick = onLogout,
-                colors = ButtonDefaults.buttonColors(containerColor = Blot),
+                colors = ButtonDefaults.buttonColors(containerColor = pal.danger, contentColor = pal.accentInk),
                 shape = RoundedCornerShape(2.dp),
             ) {
                 Text("Disconnect")
@@ -86,8 +95,9 @@ fun SettingsScreen(
 
 @Composable
 private fun LabelValue(label: String, value: String) {
+    val pal = LocalScient.current
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Stake)
-        Text(value, style = MaterialTheme.typography.titleMedium, color = Mist)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = pal.textSoft)
+        Text(value, style = MaterialTheme.typography.titleMedium, color = pal.text)
     }
 }

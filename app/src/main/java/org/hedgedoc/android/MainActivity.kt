@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import org.hedgedoc.android.data.HedgeEdition
 import org.hedgedoc.android.data.HedgeUrls
 import org.hedgedoc.android.ui.AppViewModel
 import org.hedgedoc.android.ui.Dest
@@ -30,7 +31,7 @@ import org.hedgedoc.android.ui.screens.NotesScreen
 import org.hedgedoc.android.ui.screens.ReaderScreen
 import org.hedgedoc.android.ui.screens.SettingsScreen
 import org.hedgedoc.android.ui.theme.HedgeTheme
-import org.hedgedoc.android.ui.theme.Spine
+import org.hedgedoc.android.ui.theme.LocalScient
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -43,8 +44,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         ingest(intent)
         setContent {
-            HedgeTheme {
-                val state by vm.state.collectAsStateWithLifecycle()
+            val state by vm.state.collectAsStateWithLifecycle()
+            HedgeTheme(themeId = state.themeId) {
                 val snackHost = remember { SnackbarHostState() }
                 LaunchedEffect(state.share) {
                     val share = state.share ?: return@LaunchedEffect
@@ -74,7 +75,7 @@ class MainActivity : ComponentActivity() {
                 }
                 Box(Modifier.fillMaxSize()) {
                     if (!state.ready) {
-                        CircularProgressIndicator(Modifier.align(Alignment.Center), color = Spine)
+                        CircularProgressIndicator(Modifier.align(Alignment.Center), color = LocalScient.current.accent)
                     } else {
                         val canBack = state.dest !is Dest.Connect && state.dest !is Dest.Notes
                         BackHandler(enabled = canBack) { vm.back() }
@@ -82,6 +83,8 @@ class MainActivity : ComponentActivity() {
                             Dest.Connect -> ConnectScreen(
                                 loading = state.loading,
                                 error = state.error,
+                                themeId = state.themeId,
+                                onTheme = vm::setTheme,
                                 onConnect = vm::connect,
                             )
                             Dest.Notes -> {
@@ -90,6 +93,8 @@ class MainActivity : ComponentActivity() {
                                     ConnectScreen(
                                         loading = state.loading,
                                         error = state.error,
+                                        themeId = state.themeId,
+                                        onTheme = vm::setTheme,
                                         onConnect = vm::connect,
                                     )
                                 } else {
@@ -118,6 +123,7 @@ class MainActivity : ComponentActivity() {
                                 history = state.notes.find { it.id == dest.id },
                                 revisions = state.revisions,
                                 permission = state.permission,
+                                edition = state.session?.edition,
                                 loading = state.loading,
                                 error = state.error,
                                 serverUrl = state.session?.serverUrl.orEmpty(),
@@ -150,7 +156,11 @@ class MainActivity : ComponentActivity() {
                             is Dest.Live -> {
                                 val server = state.session?.serverUrl.orEmpty()
                                 val parsed = server.toHttpUrlOrNull()
-                                val url = if (parsed != null) HedgeUrls.noteUrl(parsed, dest.id) else server
+                                val url = if (parsed != null) {
+                                    HedgeUrls.noteUrl(parsed, dest.id, state.session?.edition ?: HedgeEdition.V1)
+                                } else {
+                                    server
+                                }
                                 LiveEditorScreen(
                                     url = url,
                                     cookieHeader = vm.cookieHeader(),
@@ -163,12 +173,16 @@ class MainActivity : ComponentActivity() {
                                     ConnectScreen(
                                         loading = state.loading,
                                         error = state.error,
+                                        themeId = state.themeId,
+                                        onTheme = vm::setTheme,
                                         onConnect = vm::connect,
                                     )
                                 } else {
                                     SettingsScreen(
                                         session = session,
                                         serverStatus = state.serverStatus,
+                                        themeId = state.themeId,
+                                        onTheme = vm::setTheme,
                                         onBack = vm::back,
                                         onLoadStatus = vm::loadStatus,
                                         onLogout = vm::logout,

@@ -33,18 +33,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import okhttp3.OkHttpClient
+import org.hedgedoc.android.data.HedgeEdition
 import org.hedgedoc.android.data.HistoryNote
 import org.hedgedoc.android.data.NotePermissions
+import org.hedgedoc.android.data.NotePermissionsV2
 import org.hedgedoc.android.data.OpenNote
 import org.hedgedoc.android.data.Revision
 import org.hedgedoc.android.ui.components.ErrorBanner
 import org.hedgedoc.android.ui.components.MarkdownPane
-import org.hedgedoc.android.ui.theme.Ink
-import org.hedgedoc.android.ui.theme.InkMute
-import org.hedgedoc.android.ui.theme.Label
-import org.hedgedoc.android.ui.theme.Mist
-import org.hedgedoc.android.ui.theme.NightPane
-import org.hedgedoc.android.ui.theme.Spine
+import org.hedgedoc.android.ui.theme.LocalScient
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -56,6 +53,7 @@ fun ReaderScreen(
     history: HistoryNote?,
     revisions: List<Revision>,
     permission: String,
+    edition: HedgeEdition?,
     loading: Boolean,
     error: String?,
     serverUrl: String,
@@ -78,6 +76,7 @@ fun ReaderScreen(
     var menu by remember { mutableStateOf(false) }
     var revMenu by remember { mutableStateOf(false) }
     var permMenu by remember { mutableStateOf(false) }
+    val pal = LocalScient.current
     val title = note?.info?.title ?: history?.title ?: note?.id ?: "Note"
     val meta = buildString {
         note?.info?.let { info ->
@@ -93,35 +92,37 @@ fun ReaderScreen(
         }
     }
     Scaffold(
-        containerColor = Label,
+        containerColor = pal.paper,
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(title, style = MaterialTheme.typography.titleLarge, color = Mist, maxLines = 1)
+                        Text(title, style = MaterialTheme.typography.titleLarge, color = pal.text, maxLines = 1)
                         if (meta.isNotBlank()) {
-                            Text(meta, style = MaterialTheme.typography.labelSmall, color = Spine, maxLines = 1)
+                            Text(meta, style = MaterialTheme.typography.labelSmall, color = pal.accent, maxLines = 1)
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Mist)
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = pal.text)
                     }
                 },
                 actions = {
                     IconButton(onClick = onEdit) {
-                        Icon(Icons.Outlined.Edit, contentDescription = "Edit", tint = Mist)
+                        Icon(Icons.Outlined.Edit, contentDescription = "Edit", tint = pal.text)
                     }
                     Box {
                         IconButton(onClick = { menu = true }) {
-                            Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = Mist)
+                            Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = pal.text)
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text("Live editor") }, onClick = { menu = false; onLive() })
                             DropdownMenuItem(text = { Text("Share link") }, onClick = { menu = false; onShare() })
                             DropdownMenuItem(text = { Text("Share markdown") }, onClick = { menu = false; onShareMarkdown() })
-                            DropdownMenuItem(text = { Text("Export PDF") }, onClick = { menu = false; onSharePdf() })
+                            if (edition != HedgeEdition.V2) {
+                                DropdownMenuItem(text = { Text("Export PDF") }, onClick = { menu = false; onSharePdf() })
+                            }
                             DropdownMenuItem(text = { Text("Published link") }, onClick = { menu = false; onPublished() })
                             DropdownMenuItem(text = { Text(if (history?.pinned == true) "Unpin" else "Pin") }, onClick = { menu = false; onPin() })
                             DropdownMenuItem(
@@ -161,7 +162,8 @@ fun ReaderScreen(
                             }
                         }
                         DropdownMenu(expanded = permMenu, onDismissRequest = { permMenu = false }) {
-                            NotePermissions.forEach { value ->
+                            val options = if (edition == HedgeEdition.V2) NotePermissionsV2 else NotePermissions
+                            options.forEach { value ->
                                 val mark = if (value == permission) " · current" else ""
                                 DropdownMenuItem(
                                     text = { Text(value + mark) },
@@ -171,7 +173,7 @@ fun ReaderScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NightPane),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = pal.bg),
             )
         },
     ) { padding ->
@@ -179,11 +181,11 @@ fun ReaderScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Label),
+                .background(pal.paper),
         ) {
             when {
                 error != null && note == null -> ErrorBanner(error, modifier = Modifier.padding(16.dp))
-                loading && note == null -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Spine)
+                loading && note == null -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = pal.accent)
                 note != null -> {
                     Column(
                         modifier = Modifier
@@ -195,7 +197,7 @@ fun ReaderScreen(
                             markdown = note.markdown,
                             baseUrl = serverUrl,
                             http = http,
-                            textColor = Ink.toArgb(),
+                            textColor = pal.paperInk.toArgb(),
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }

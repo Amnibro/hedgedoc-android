@@ -25,6 +25,7 @@ data class NoteInfo(
 )
 
 data class Revision(
+    val id: String,
     val time: Long,
     val length: Int,
     val author: String,
@@ -35,6 +36,8 @@ data class Session(
     val email: String,
     val authMethod: String,
     val profile: Profile,
+    val edition: HedgeEdition = HedgeEdition.V1,
+    val apiToken: String = "",
 )
 
 data class OpenNote(
@@ -60,7 +63,9 @@ data class OutgoingShare(
 
 class HedgeException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-enum class AuthMethod { EMAIL, LDAP, GUEST, COOKIE }
+enum class AuthMethod { EMAIL, LDAP, GUEST, COOKIE, TOKEN }
+
+enum class HedgeEdition { V1, V2 }
 
 enum class NoteFilter { ALL, PINNED }
 
@@ -72,3 +77,5 @@ val NotePermissions = listOf(
     "protected",
     "private",
 )
+
+val NotePermissionsV2 = listOf("public", "private")

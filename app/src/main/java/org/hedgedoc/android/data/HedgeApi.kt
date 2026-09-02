@@ -8,12 +8,13 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 class HedgeApi(
-    private val http: OkHttpClient,
+    private val net: HedgeHttp,
 ) {
+    constructor(http: OkHttpClient) : this(HedgeHttp(http))
+
+    val http: OkHttpClient get() = net.client
     fun warmup(server: HttpUrl) {
         execute(Request.Builder().url(server).get().build(), followBody = false)
     }
@@ -195,9 +196,11 @@ class HedgeApi(
         val out = ArrayList<Revision>(array.length())
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
+            val time = item.optLong("time")
             out.add(
                 Revision(
-                    time = item.optLong("time"),
+                    id = time.toString(),
+                    time = time,
                     length = item.optInt("length"),
                     author = item.optString("author").ifBlank { item.optString("name") },
                 ),
@@ -227,17 +230,10 @@ class HedgeApi(
             .header("Accept", "application/pdf")
             .get()
             .build()
-        val call = http.newCall(request)
-        val response = try {
-            call.execute()
-        } catch (e: IOException) {
-            throw HedgeException("Couldn't download the PDF. ${e.message}", e)
-        }
-        response.use { res ->
-            if (res.code !in 200..299) {
-                throw HedgeException("PDF export failed (${res.code}). This instance may have it turned off.")
-            }
-            return res.body?.bytes() ?: throw HedgeException("Empty PDF.")
+        return try {
+            net.bytes(request)
+        } catch (e: HedgeException) {
+            throw HedgeException("PDF export failed. This instance may have it turned off.", e)
         }
     }
 
@@ -253,53 +249,17 @@ class HedgeApi(
         return response.finalUrl
     }
 
-    private data class RawResponse(
-        val code: Int,
-        val body: String,
-        val headers: Map<String, String>,
-        val finalUrl: String,
-    )
-
-    private fun execute(request: Request, followBody: Boolean = true): RawResponse {
-        val call = http.newCall(request)
-        val response = try {
-            call.execute()
-        } catch (e: IOException) {
-            throw HedgeException("Couldn't reach ${request.url.host}. ${e.message}", e)
-        }
-        response.use { res ->
-            val body = if (followBody) res.body?.string().orEmpty() else ""
-            val headers = buildMap {
-                res.headers.names().forEach { name ->
-                    val value = res.header(name)
-                    if (value != null) put(name, value)
-                }
-            }
-            if (res.code >= 500) {
-                throw HedgeException("Server error ${res.code} from ${request.url.encodedPath}.")
-            }
-            return RawResponse(res.code, body, headers, res.request.url.toString())
-        }
-    }
+    private fun execute(request: Request, followBody: Boolean = true) = net.execute(request, followBody)
 
     private fun parseObject(raw: String): JSONObject {
         return try {
             JSONObject(raw)
         } catch (e: Exception) {
-            throw HedgeException("Server sent HTML instead of JSON. This app talks to HedgeDoc 1.x.", e)
+            throw HedgeException("Server sent HTML instead of JSON. This may be HedgeDoc 2; reconnect and the app will probe it.", e)
         }
     }
 
     companion object {
-        fun newClient(cookieJar: MemoryCookieJar): OkHttpClient {
-            return OkHttpClient.Builder()
-                .cookieJar(cookieJar)
-                .followRedirects(true)
-                .followSslRedirects(true)
-                .connectTimeout(20, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .build()
-        }
+        fun newClient(cookieJar: MemoryCookieJar): OkHttpClient = HedgeHttp.newClient(cookieJar)
     }
 }

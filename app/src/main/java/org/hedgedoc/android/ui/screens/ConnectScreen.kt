@@ -3,7 +3,8 @@ package org.hedgedoc.android.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,52 +35,52 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import org.hedgedoc.android.data.AuthMethod
 import org.hedgedoc.android.ui.components.ErrorBanner
-import org.hedgedoc.android.ui.theme.Frame
-import org.hedgedoc.android.ui.theme.Mist
-import org.hedgedoc.android.ui.theme.NightPane
-import org.hedgedoc.android.ui.theme.Spine
-import org.hedgedoc.android.ui.theme.Stake
-import org.hedgedoc.android.ui.theme.Verdigris
+import org.hedgedoc.android.ui.components.ThemePicker
+import org.hedgedoc.android.ui.theme.LocalScient
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ConnectScreen(
     loading: Boolean,
     error: String?,
+    themeId: String,
+    onTheme: (String) -> Unit,
     onConnect: (server: String, method: AuthMethod, user: String, pass: String) -> Unit,
 ) {
+    val pal = LocalScient.current
     var server by rememberSaveable { mutableStateOf("https://demo.hedgedoc.org") }
     var user by rememberSaveable { mutableStateOf("") }
     var pass by rememberSaveable { mutableStateOf("") }
     var method by rememberSaveable { mutableStateOf(AuthMethod.EMAIL) }
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Verdigris,
-        unfocusedBorderColor = Stake,
-        focusedLabelColor = Spine,
-        cursorColor = Spine,
-        focusedTextColor = Mist,
-        unfocusedTextColor = Mist,
+        focusedBorderColor = pal.accent,
+        unfocusedBorderColor = pal.border,
+        focusedLabelColor = pal.accent,
+        cursorColor = pal.accent,
+        focusedTextColor = pal.text,
+        unfocusedTextColor = pal.text,
     )
     val chipColors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = Verdigris,
-        selectedLabelColor = NightPane,
-        containerColor = Frame,
-        labelColor = Mist,
+        selectedContainerColor = pal.accent,
+        selectedLabelColor = pal.accentInk,
+        containerColor = pal.panel,
+        labelColor = pal.text,
     )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(NightPane)
+            .background(pal.bg)
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Spacer(Modifier.height(36.dp))
-        Text("HedgeDoc", style = MaterialTheme.typography.displayLarge, color = Mist)
+        Text("HedgeDoc", style = MaterialTheme.typography.displayLarge, color = pal.text)
         Text(
-            "Notes from the greenhouse you already run.",
+            "Connects to the HedgeDoc you already run, 1.x or 2.",
             style = MaterialTheme.typography.bodyLarge,
-            color = Stake,
+            color = pal.textSoft,
         )
         Spacer(Modifier.height(4.dp))
         OutlinedTextField(
@@ -92,16 +93,17 @@ fun ConnectScreen(
             shape = RoundedCornerShape(2.dp),
             colors = fieldColors,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = method == AuthMethod.EMAIL, onClick = { method = AuthMethod.EMAIL }, label = { Text("Email") }, colors = chipColors)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = method == AuthMethod.EMAIL, onClick = { method = AuthMethod.EMAIL }, label = { Text("Local") }, colors = chipColors)
             FilterChip(selected = method == AuthMethod.LDAP, onClick = { method = AuthMethod.LDAP }, label = { Text("LDAP") }, colors = chipColors)
             FilterChip(selected = method == AuthMethod.COOKIE, onClick = { method = AuthMethod.COOKIE }, label = { Text("Cookie") }, colors = chipColors)
+            FilterChip(selected = method == AuthMethod.TOKEN, onClick = { method = AuthMethod.TOKEN }, label = { Text("Token") }, colors = chipColors)
         }
         if (method == AuthMethod.EMAIL || method == AuthMethod.LDAP) {
             OutlinedTextField(
                 value = user,
                 onValueChange = { user = it },
-                label = { Text(if (method == AuthMethod.LDAP) "Username" else "Email") },
+                label = { Text(if (method == AuthMethod.LDAP) "Username" else "Email or username") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier.fillMaxWidth(),
@@ -131,9 +133,26 @@ fun ConnectScreen(
                 colors = fieldColors,
             )
             Text(
-                "OAuth servers don't have a password login. Copy the connect.sid cookie while you're signed in on the website.",
+                "OAuth or OIDC: copy a session cookie while you're signed in on the website. HedgeDoc 1 uses connect.sid. HedgeDoc 2 uses whatever cookie the backend set.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Stake,
+                color = pal.textSoft,
+            )
+        }
+        if (method == AuthMethod.TOKEN) {
+            OutlinedTextField(
+                value = pass,
+                onValueChange = { pass = it },
+                label = { Text("API token") },
+                placeholder = { Text("From your HedgeDoc 2 profile") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                shape = RoundedCornerShape(2.dp),
+                colors = fieldColors,
+            )
+            Text(
+                "HedgeDoc 2 only. Create a token on the website profile page and paste the secret.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = pal.textSoft,
             )
         }
         if (error != null) ErrorBanner(error)
@@ -144,10 +163,10 @@ fun ConnectScreen(
                 .fillMaxWidth()
                 .height(52.dp),
             shape = RoundedCornerShape(2.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Spine, contentColor = NightPane),
+            colors = ButtonDefaults.buttonColors(containerColor = pal.accent, contentColor = pal.accentInk),
         ) {
             if (loading) {
-                CircularProgressIndicator(modifier = Modifier.height(22.dp), color = NightPane, strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.height(22.dp), color = pal.accentInk, strokeWidth = 2.dp)
             } else {
                 Text("Connect")
             }
@@ -156,7 +175,9 @@ fun ConnectScreen(
             onClick = { onConnect(server, AuthMethod.GUEST, "", "") },
             enabled = !loading,
         ) {
-            Text("Continue as guest", color = Verdigris)
+            Text("Continue as guest", color = pal.accent)
         }
+        Text("Theme", style = MaterialTheme.typography.labelSmall, color = pal.textSoft)
+        ThemePicker(selectedId = themeId, onSelect = onTheme)
     }
 }

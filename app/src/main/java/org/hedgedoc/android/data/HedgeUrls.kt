@@ -6,9 +6,9 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 object HedgeUrls {
     private val reserved = setOf(
         "", "new", "login", "logout", "me", "history", "auth", "status",
-        "config", "features", "s", "p", "uploads", "api", "socket.io",
+        "config", "features", "s", "p", "n", "uploads", "api", "socket.io",
         "build", "css", "js", "fonts", "screenshot", "user", "register",
-        "pretty", "privacy", "terms", "favicon.ico", "robots.txt",
+        "pretty", "privacy", "terms", "profile", "favicon.ico", "robots.txt",
     )
 
     fun normalizeServer(raw: String): HttpUrl {
@@ -56,6 +56,9 @@ object HedgeUrls {
         if (first.lowercase() == "s" && parts.size >= 2) {
             return parts[1].substringBefore('?').substringBefore('#')
         }
+        if (first.lowercase() == "n" && parts.size >= 2) {
+            return parts[1].substringBefore('?').substringBefore('#')
+        }
         if (first.lowercase() in reserved) return null
         return first.substringBefore('?').substringBefore('#')
     }
@@ -73,7 +76,13 @@ object HedgeUrls {
         return noteIdFromPath(path)
     }
 
-    fun noteUrl(server: HttpUrl, noteId: String): String = join(server, noteId).toString()
+    fun noteUrl(server: HttpUrl, noteId: String, edition: HedgeEdition = HedgeEdition.V1): String {
+        return if (edition == HedgeEdition.V2) {
+            join(server, "n", noteId).toString()
+        } else {
+            join(server, noteId).toString()
+        }
+    }
 
     fun titleFromMarkdown(markdown: String): String {
         val lines = markdown.lineSequence()

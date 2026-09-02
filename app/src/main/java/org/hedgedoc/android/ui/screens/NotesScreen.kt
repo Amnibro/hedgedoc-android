@@ -44,12 +44,7 @@ import org.hedgedoc.android.data.NoteFilter
 import org.hedgedoc.android.data.Session
 import org.hedgedoc.android.ui.components.ErrorBanner
 import org.hedgedoc.android.ui.components.NoteRow
-import org.hedgedoc.android.ui.theme.Frame
-import org.hedgedoc.android.ui.theme.Mist
-import org.hedgedoc.android.ui.theme.NightPane
-import org.hedgedoc.android.ui.theme.Spine
-import org.hedgedoc.android.ui.theme.Stake
-import org.hedgedoc.android.ui.theme.Verdigris
+import org.hedgedoc.android.ui.theme.LocalScient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,42 +67,43 @@ fun NotesScreen(
     onCreate: () -> Unit,
 ) {
     var menuFor by remember { mutableStateOf<String?>(null) }
+    val pal = LocalScient.current
     val chipColors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = Verdigris,
-        selectedLabelColor = NightPane,
-        containerColor = Frame,
-        labelColor = Mist,
+        selectedContainerColor = pal.accent,
+        selectedLabelColor = pal.accentInk,
+        containerColor = pal.panel,
+        labelColor = pal.text,
     )
     Scaffold(
-        containerColor = NightPane,
+        containerColor = pal.bg,
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text("Notes", style = MaterialTheme.typography.headlineMedium, color = Mist)
+                        Text("Notes", style = MaterialTheme.typography.headlineMedium, color = pal.text)
                         Text(
                             session.profile.name.ifBlank { session.email.ifBlank { session.serverUrl } },
                             style = MaterialTheme.typography.labelSmall,
-                            color = Stake,
+                            color = pal.textSoft,
                         )
                     }
                 },
                 actions = {
                     IconButton(onClick = onRefresh) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "Refresh", tint = Mist)
+                        Icon(Icons.Outlined.Refresh, contentDescription = "Refresh", tint = pal.text)
                     }
                     IconButton(onClick = onSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = Mist)
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = pal.text)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NightPane),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = pal.bg),
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onCreate,
-                containerColor = Spine,
-                contentColor = NightPane,
+                containerColor = pal.accent,
+                contentColor = pal.accentInk,
                 shape = RoundedCornerShape(2.dp),
             ) {
                 Icon(Icons.Outlined.Add, contentDescription = "New note")
@@ -128,11 +124,11 @@ fun NotesScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(2.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Verdigris,
-                    unfocusedBorderColor = Stake,
-                    cursorColor = Spine,
-                    focusedTextColor = Mist,
-                    unfocusedTextColor = Mist,
+                    focusedBorderColor = pal.accent,
+                    unfocusedBorderColor = pal.border,
+                    cursorColor = pal.accent,
+                    focusedTextColor = pal.text,
+                    unfocusedTextColor = pal.text,
                 ),
             )
             Row(
@@ -169,7 +165,7 @@ fun NotesScreen(
                             "No notes in history yet. Write one."
                         },
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Stake,
+                        color = pal.textSoft,
                     )
                 }
             } else {

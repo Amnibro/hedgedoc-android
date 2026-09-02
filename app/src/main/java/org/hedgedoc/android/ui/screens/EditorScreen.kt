@@ -40,14 +40,8 @@ import androidx.compose.ui.unit.sp
 import okhttp3.OkHttpClient
 import org.hedgedoc.android.ui.components.ErrorBanner
 import org.hedgedoc.android.ui.components.MarkdownPane
-import org.hedgedoc.android.ui.theme.Ink
-import org.hedgedoc.android.ui.theme.Label
-import org.hedgedoc.android.ui.theme.Mist
+import org.hedgedoc.android.ui.theme.LocalScient
 import org.hedgedoc.android.ui.theme.MonoFont
-import org.hedgedoc.android.ui.theme.NightPane
-import org.hedgedoc.android.ui.theme.Spine
-import org.hedgedoc.android.ui.theme.Stake
-import org.hedgedoc.android.ui.theme.Verdigris
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,24 +58,25 @@ fun EditorScreen(
     var text by rememberSaveable(noteId, seed) { mutableStateOf(seed) }
     var alias by rememberSaveable { mutableStateOf("") }
     var preview by rememberSaveable { mutableStateOf(false) }
+    val pal = LocalScient.current
     val title = if (noteId == null) "New note" else "Edit"
     Scaffold(
-        containerColor = NightPane,
+        containerColor = pal.bg,
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(title, style = MaterialTheme.typography.titleLarge, color = Mist)
+                        Text(title, style = MaterialTheme.typography.titleLarge, color = pal.text)
                         Text(
                             "${text.length} characters",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Stake,
+                            color = pal.textSoft,
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Mist)
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = pal.text)
                     }
                 },
                 actions = {
@@ -89,18 +84,18 @@ fun EditorScreen(
                         Icon(
                             if (preview) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                             contentDescription = if (preview) "Show markdown" else "Preview",
-                            tint = Mist,
+                            tint = pal.text,
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NightPane),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = pal.bg),
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { if (!saving) onSave(text, alias.ifBlank { null }) },
-                containerColor = Spine,
-                contentColor = NightPane,
+                containerColor = pal.accent,
+                contentColor = pal.accentInk,
                 shape = RoundedCornerShape(2.dp),
             ) {
                 Icon(Icons.Outlined.Save, contentDescription = "Save")
@@ -127,11 +122,11 @@ fun EditorScreen(
                     singleLine = true,
                     shape = RoundedCornerShape(2.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Verdigris,
-                        unfocusedBorderColor = Stake,
-                        cursorColor = Spine,
-                        focusedTextColor = Mist,
-                        unfocusedTextColor = Mist,
+                        focusedBorderColor = pal.accent,
+                        unfocusedBorderColor = pal.border,
+                        cursorColor = pal.accent,
+                        focusedTextColor = pal.text,
+                        unfocusedTextColor = pal.text,
                     ),
                 )
             }
@@ -140,7 +135,7 @@ fun EditorScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(bottom = 88.dp)
-                        .background(Label)
+                        .background(pal.paper)
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp),
                 ) {
@@ -148,7 +143,7 @@ fun EditorScreen(
                         markdown = text,
                         baseUrl = serverUrl,
                         http = http,
-                        textColor = Ink.toArgb(),
+                            textColor = pal.paperInk.toArgb(),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -163,9 +158,9 @@ fun EditorScreen(
                         fontFamily = MonoFont,
                         fontSize = 15.sp,
                         lineHeight = 22.sp,
-                        color = Mist,
+                        color = pal.text,
                     ),
-                    cursorBrush = SolidColor(Spine),
+                    cursorBrush = SolidColor(pal.accent),
                     decorationBox = { inner ->
                         Box {
                             if (text.isEmpty()) {
@@ -175,7 +170,7 @@ fun EditorScreen(
                                         fontFamily = MonoFont,
                                         fontSize = 15.sp,
                                         lineHeight = 22.sp,
-                                        color = Stake,
+                                        color = pal.textSoft,
                                     ),
                                 )
                             }

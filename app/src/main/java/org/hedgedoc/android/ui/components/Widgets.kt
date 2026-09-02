@@ -28,13 +28,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.hedgedoc.android.data.HistoryNote
-import org.hedgedoc.android.ui.theme.Blot
-import org.hedgedoc.android.ui.theme.Ink
-import org.hedgedoc.android.ui.theme.InkMute
-import org.hedgedoc.android.ui.theme.Label
-import org.hedgedoc.android.ui.theme.Spine
-import org.hedgedoc.android.ui.theme.Stake
-import org.hedgedoc.android.ui.theme.Verdigris
+import org.hedgedoc.android.ui.theme.LocalScient
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,7 +48,8 @@ fun QuillGutter(
     pinned: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val color = if (pinned) Spine else Stake
+    val pal = LocalScient.current
+    val color = if (pinned) pal.accent else pal.textSoft
     val ticks = if (pinned) 12 else 8
     Canvas(modifier = modifier) {
         val step = size.height / (ticks + 1)
@@ -79,6 +74,7 @@ fun NoteRow(
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val pal = LocalScient.current
     val stamp = if (note.time > 0) {
         SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(note.time))
     } else {
@@ -88,7 +84,7 @@ fun NoteRow(
         modifier = modifier
             .fillMaxWidth()
             .clip(PlantLabelShape)
-            .background(Label)
+            .background(pal.paper)
             .clickable(onClick = onClick)
             .height(96.dp)
             .padding(end = 4.dp),
@@ -110,36 +106,37 @@ fun NoteRow(
             Text(
                 text = note.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = Ink,
+                color = pal.paperInk,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (stamp.isNotBlank()) {
-                    Text(stamp, style = MaterialTheme.typography.labelSmall, color = InkMute)
+                    Text(stamp, style = MaterialTheme.typography.labelSmall, color = pal.textSoft)
                 }
                 if (note.pinned) {
-                    Text("pinned", style = MaterialTheme.typography.labelSmall, color = Spine)
+                    Text("pinned", style = MaterialTheme.typography.labelSmall, color = pal.accent)
                 }
                 note.tags.take(3).forEach { tag ->
-                    Text(tag, style = MaterialTheme.typography.labelSmall, color = Verdigris)
+                    Text(tag, style = MaterialTheme.typography.labelSmall, color = pal.accentSoft)
                 }
             }
         }
         IconButton(onClick = onMenu) {
-            Icon(Icons.Outlined.MoreVert, contentDescription = "Note actions", tint = InkMute)
+            Icon(Icons.Outlined.MoreVert, contentDescription = "Note actions", tint = pal.textSoft)
         }
     }
 }
 
 @Composable
 fun ErrorBanner(message: String, modifier: Modifier = Modifier) {
+    val pal = LocalScient.current
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(Blot.copy(alpha = 0.18f))
+            .background(pal.danger.copy(alpha = 0.18f))
             .padding(12.dp),
     ) {
-        Text(message, color = Blot, style = MaterialTheme.typography.bodyMedium)
+        Text(message, color = pal.danger, style = MaterialTheme.typography.bodyMedium)
     }
 }

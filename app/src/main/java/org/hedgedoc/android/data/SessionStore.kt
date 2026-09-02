@@ -21,6 +21,9 @@ class SessionStore(private val context: Context) {
     private val keyAuth = stringPreferencesKey("auth")
     private val keyProfile = stringPreferencesKey("profile")
     private val keyCookies = stringPreferencesKey("cookies")
+    private val keyTheme = stringPreferencesKey("theme")
+    private val keyEdition = stringPreferencesKey("edition")
+    private val keyApiToken = stringPreferencesKey("api_token")
 
     val session: Flow<Session?> = context.sessionDataStore.data.map { prefs ->
         val server = prefs[keyServer].orEmpty()
@@ -33,8 +36,18 @@ class SessionStore(private val context: Context) {
                 email = prefs[keyEmail].orEmpty(),
                 authMethod = prefs[keyAuth].orEmpty().ifBlank { "email" },
                 profile = decodeProfile(profileRaw),
+                edition = HedgeEdition.entries.firstOrNull { it.name == prefs[keyEdition] } ?: HedgeEdition.V1,
+                apiToken = prefs[keyApiToken].orEmpty(),
             )
         }
+    }
+
+    val themeId: Flow<String> = context.sessionDataStore.data.map { prefs ->
+        prefs[keyTheme].orEmpty().ifBlank { "scient" }
+    }
+
+    suspend fun setTheme(id: String) {
+        context.sessionDataStore.edit { it[keyTheme] = id }
     }
 
     suspend fun current(): Session? = session.first()
@@ -46,6 +59,8 @@ class SessionStore(private val context: Context) {
             prefs[keyAuth] = session.authMethod
             prefs[keyProfile] = encodeProfile(session.profile)
             prefs[keyCookies] = encodeCookies(cookies)
+            prefs[keyEdition] = session.edition.name
+            if (session.apiToken.isBlank()) prefs.remove(keyApiToken) else prefs[keyApiToken] = session.apiToken
         }
     }
 
@@ -56,7 +71,11 @@ class SessionStore(private val context: Context) {
     }
 
     suspend fun clear() {
-        context.sessionDataStore.edit { it.clear() }
+        context.sessionDataStore.edit { prefs ->
+            val theme = prefs[keyTheme]
+            prefs.clear()
+            if (theme != null) prefs[keyTheme] = theme
+        }
     }
 
     private fun encodeProfile(profile: Profile): String {

@@ -44,6 +44,7 @@ data class UiState(
     val revisions: List<Revision> = emptyList(),
     val permission: String = "",
     val serverStatus: String = "",
+    val themeId: String = "scient",
 ) {
     val filtered: List<HistoryNote>
         get() {
@@ -71,6 +72,11 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
     init {
         viewModelScope.launch {
             repo.restoreCookies()
+            launch {
+                repo.themeId.collect { id ->
+                    _state.update { it.copy(themeId = id) }
+                }
+            }
             repo.session.collect { session ->
                 val dest = if (session == null) Dest.Connect else {
                     when (_state.value.dest) {
@@ -299,7 +305,7 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
         viewModelScope.launch {
             val id = _state.value.note?.id ?: return@launch
             try {
-                val opened = repo.openRevision(id, revision.time)
+                val opened = repo.openRevision(id, revision)
                 _state.update { it.copy(note = opened, snack = "Showing revision") }
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message) }
@@ -341,6 +347,10 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
         }
     }
 
+    fun setTheme(id: String) {
+        viewModelScope.launch { repo.setTheme(id) }
+    }
+
     fun loadStatus() {
         viewModelScope.launch {
             try {
@@ -353,8 +363,9 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
 
     fun logout() {
         viewModelScope.launch {
+            val theme = _state.value.themeId
             repo.disconnect()
-            _state.update { UiState(ready = true, dest = Dest.Connect) }
+            _state.update { UiState(ready = true, dest = Dest.Connect, themeId = theme) }
         }
     }
 
