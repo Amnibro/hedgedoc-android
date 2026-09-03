@@ -35,10 +35,12 @@ import androidx.compose.ui.unit.dp
 import okhttp3.OkHttpClient
 import org.hedgedoc.android.data.HedgeEdition
 import org.hedgedoc.android.data.HistoryNote
+import org.hedgedoc.android.data.LiveStatus
 import org.hedgedoc.android.data.NotePermissions
 import org.hedgedoc.android.data.NotePermissionsV2
 import org.hedgedoc.android.data.OpenNote
 import org.hedgedoc.android.data.Revision
+import org.hedgedoc.android.ui.SyncState
 import org.hedgedoc.android.ui.components.ErrorBanner
 import org.hedgedoc.android.ui.components.MarkdownPane
 import org.hedgedoc.android.ui.theme.LocalScient
@@ -55,10 +57,13 @@ fun ReaderScreen(
     permission: String,
     edition: HedgeEdition?,
     loading: Boolean,
+    liveStatus: LiveStatus?,
+    sync: SyncState,
     error: String?,
     serverUrl: String,
     http: OkHttpClient,
     onBack: () -> Unit,
+    onToggleTask: (Int) -> Unit,
     onEdit: () -> Unit,
     onLive: () -> Unit,
     onShare: () -> Unit,
@@ -89,6 +94,11 @@ fun ReaderScreen(
         if (note?.cached == true) {
             if (isNotEmpty()) append(" · ")
             append("cached copy")
+        }
+        val live = readerStatus(liveStatus, sync)
+        if (live.isNotBlank()) {
+            if (isNotEmpty()) append(" · ")
+            append(live)
         }
     }
     Scaffold(
@@ -199,10 +209,25 @@ fun ReaderScreen(
                             http = http,
                             textColor = pal.paperInk.toArgb(),
                             modifier = Modifier.fillMaxWidth(),
+                            onToggleTask = onToggleTask,
                         )
                     }
                 }
             }
         }
+    }
+}
+
+private fun readerStatus(liveStatus: LiveStatus?, sync: SyncState): String {
+    if (sync == SyncState.SAVING) return "saving"
+    if (sync == SyncState.FAILED) return "save failed"
+    return when (liveStatus) {
+        LiveStatus.LIVE -> "live"
+        LiveStatus.CONNECTING -> "connecting"
+        LiveStatus.OFFLINE -> "offline"
+        LiveStatus.READONLY -> "read only"
+        LiveStatus.GONE -> "deleted on the server"
+        LiveStatus.FAILED -> "live unavailable"
+        null -> ""
     }
 }

@@ -12,3 +12,5 @@
 *.aab
 *.ap_
 *.dex
+/backups/
+/docs/checklists/

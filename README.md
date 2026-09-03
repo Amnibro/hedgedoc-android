@@ -17,7 +17,7 @@ Connect to a server you host, or `https://demo.hedgedoc.org`. The app asks `/api
 - **unsigned** — same release build, no signature. Sign it with your own key if you want.
 
 ```
-adb install -r hedgedoc-android-1.1.0-signed.apk
+adb install -r hedgedoc-android-1.2.0-signed.apk
 ```
 
 Min Android 8.0 (API 26).
@@ -26,11 +26,13 @@ Min Android 8.0 (API 26).
 
 - Email/username, LDAP, guest, browser session cookie, or HedgeDoc 2 API token
 - History with search, pinned filter, plant-label cards
-- Markdown reader (tables, tasks, images)
+- Markdown reader (tables, tasks, images) with tappable task checkboxes
+- Native live view on HedgeDoc 1.x: the reader and the editor follow other people's edits over the
+  Socket.IO document, no WebView involved
 - Native editor with preview and optional alias on create
-- HedgeDoc 1.x: save existing notes over Socket.IO OT (full-document replace)
-- HedgeDoc 2: create/update/delete over REST
-- Live editor (WebView with your session cookie; `/n/…` on HedgeDoc 2)
+- Autosave. Typing writes itself 1.2s after you stop, and leaving the editor flushes the rest
+- HedgeDoc 2: create/update/delete over REST, reader re-reads on a timer
+- Live editor (WebView with your session cookie; `/n/…` on HedgeDoc 2) for the full web UI
 - Pin, remove from history, delete note
 - Share link, markdown, or PDF (PDF is 1.x)
 - Published link, revisions, permission (1.x: freely…private; 2: public/private)
@@ -38,7 +40,7 @@ Min Android 8.0 (API 26).
 - Share text into the app as a new note
 - Amni-Scient themes
 
-Saving an existing 1.x note replaces the whole document. If someone else is typing in it, your save can overwrite them. Use **Live editor** for real collaborative typing.
+Edits to a 1.x note go out as operations against the live document, transformed against anything a collaborator sent while yours was in flight, so two people can type in the same note. HedgeDoc 2 has no realtime protocol this app can speak, so a 2 note is written whole and read back on a timer.
 
 ## Build
 

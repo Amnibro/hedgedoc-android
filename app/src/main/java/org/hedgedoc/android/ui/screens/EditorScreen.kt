@@ -12,11 +12,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,6 +37,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import okhttp3.OkHttpClient
+import org.hedgedoc.android.data.LiveStatus
+import org.hedgedoc.android.ui.SyncState
 import org.hedgedoc.android.ui.components.ErrorBanner
 import org.hedgedoc.android.ui.components.MarkdownPane
 import org.hedgedoc.android.ui.theme.LocalScient
@@ -46,19 +47,26 @@ import org.hedgedoc.android.ui.theme.MonoFont
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(
+    editKey: String,
     noteId: String?,
     seed: String,
-    saving: Boolean,
+    sync: SyncState,
+    liveStatus: LiveStatus?,
+    remoteText: String?,
     error: String?,
     serverUrl: String,
     http: OkHttpClient,
     onBack: () -> Unit,
-    onSave: (markdown: String, alias: String?) -> Unit,
+    onChange: (markdown: String, alias: String?) -> Unit,
 ) {
-    var text by rememberSaveable(noteId, seed) { mutableStateOf(seed) }
+    var text by rememberSaveable(editKey) { mutableStateOf(seed) }
     var alias by rememberSaveable { mutableStateOf("") }
     var preview by rememberSaveable { mutableStateOf(false) }
     val pal = LocalScient.current
+    val settled = sync == SyncState.IDLE || sync == SyncState.SAVED
+    LaunchedEffect(remoteText, settled) {
+        if (settled && remoteText != null && remoteText != text) text = remoteText
+    }
     val title = if (noteId == null) "New note" else "Edit"
     Scaffold(
         containerColor = pal.bg,
@@ -68,9 +76,9 @@ fun EditorScreen(
                     Column {
                         Text(title, style = MaterialTheme.typography.titleLarge, color = pal.text)
                         Text(
-                            "${text.length} characters",
+                            "${text.length} characters · ${syncLabel(sync, liveStatus)}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = pal.textSoft,
+                            color = if (sync == SyncState.FAILED) pal.accent else pal.textSoft,
                         )
                     }
                 },
@@ -91,16 +99,6 @@ fun EditorScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = pal.bg),
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { if (!saving) onSave(text, alias.ifBlank { null }) },
-                containerColor = pal.accent,
-                contentColor = pal.accentInk,
-                shape = RoundedCornerShape(2.dp),
-            ) {
-                Icon(Icons.Outlined.Save, contentDescription = "Save")
-            }
-        },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -114,7 +112,10 @@ fun EditorScreen(
             if (noteId == null) {
                 OutlinedTextField(
                     value = alias,
-                    onValueChange = { alias = it },
+                    onValueChange = {
+                        alias = it
+                        onChange(text, it.ifBlank { null })
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp),
@@ -134,7 +135,7 @@ fun EditorScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(bottom = 88.dp)
+                        .padding(bottom = 24.dp)
                         .background(pal.paper)
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp),
@@ -143,17 +144,20 @@ fun EditorScreen(
                         markdown = text,
                         baseUrl = serverUrl,
                         http = http,
-                            textColor = pal.paperInk.toArgb(),
+                        textColor = pal.paperInk.toArgb(),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
             } else {
                 BasicTextField(
                     value = text,
-                    onValueChange = { text = it },
+                    onValueChange = {
+                        text = it
+                        onChange(it, alias.ifBlank { null })
+                    },
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(bottom = 88.dp),
+                        .padding(bottom = 24.dp),
                     textStyle = TextStyle(
                         fontFamily = MonoFont,
                         fontSize = 15.sp,
@@ -165,7 +169,7 @@ fun EditorScreen(
                         Box {
                             if (text.isEmpty()) {
                                 Text(
-                                    "# Title\n\nWrite markdown. Save writes the note on your server.",
+                                    "# Title\n\nWrite markdown. It saves itself.",
                                     style = TextStyle(
                                         fontFamily = MonoFont,
                                         fontSize = 15.sp,
@@ -180,5 +184,17 @@ fun EditorScreen(
                 )
             }
         }
+    }
+}
+
+private fun syncLabel(sync: SyncState, liveStatus: LiveStatus?): String {
+    if (liveStatus == LiveStatus.READONLY) return "read only"
+    if (liveStatus == LiveStatus.GONE) return "note deleted"
+    return when (sync) {
+        SyncState.IDLE -> if (liveStatus == LiveStatus.OFFLINE) "offline" else "up to date"
+        SyncState.PENDING -> "saving soon"
+        SyncState.SAVING -> "saving"
+        SyncState.SAVED -> "saved"
+        SyncState.FAILED -> "save failed"
     }
 }

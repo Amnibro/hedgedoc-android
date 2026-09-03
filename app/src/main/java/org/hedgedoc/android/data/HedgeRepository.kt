@@ -105,12 +105,33 @@ class HedgeRepository(context: Context) {
         }
     }
 
-    suspend fun openNote(noteId: String): OpenNote = withContext(Dispatchers.IO) {
+    /**
+     * A live Socket.IO document for [noteId], or null on HedgeDoc 2, which has no realtime
+     * protocol this app can speak. Callers own the session and must call `stop()`.
+     */
+    suspend fun liveSession(noteId: String): NoteSession? = withContext(Dispatchers.IO) {
+        val current = requireSession()
+        if (current.edition == HedgeEdition.V2) return@withContext null
+        val server = current.serverUrl.toHttpUrl()
+        NoteSession(server, cookies.headerFor(server), noteId)
+    }
+
+    suspend fun cacheNote(noteId: String, markdown: String) = withContext(Dispatchers.IO) {
+        val current = store.current() ?: return@withContext
+        cache.write(current.serverUrl.toHttpUrl().host, noteId, markdown)
+    }
+
+    /**
+     * [known] is content we just wrote ourselves. HedgeDoc 1.x keeps the live document in memory
+     * and flushes it to the database on a timer, so downloading straight after a save hands back
+     * the old body. When we already know what the note says, we keep it and only fetch metadata.
+     */
+    suspend fun openNote(noteId: String, known: String? = null): OpenNote = withContext(Dispatchers.IO) {
         val current = requireSession()
         val server = current.serverUrl.toHttpUrl()
         val cached = cache.read(server.host, noteId)
         try {
-            val markdown = if (current.edition == HedgeEdition.V2) {
+            val markdown = known ?: if (current.edition == HedgeEdition.V2) {
                 v2.download(server, noteId, current.apiToken.ifBlank { null })
             } else {
                 api.download(server, noteId)
@@ -128,10 +149,10 @@ class HedgeRepository(context: Context) {
             }
             OpenNote(noteId, markdown, info, cached = false, publishedUrl = published)
         } catch (e: Exception) {
-            if (cached != null) {
-                OpenNote(noteId, cached, info = null, cached = true)
-            } else {
-                throw e
+            when {
+                known != null -> OpenNote(noteId, known, info = null, cached = false)
+                cached != null -> OpenNote(noteId, cached, info = null, cached = true)
+                else -> throw e
             }
         }
     }

@@ -3,6 +3,7 @@ package org.hedgedoc.android
 import org.hedgedoc.android.data.HedgeEdition
 import org.hedgedoc.android.data.HedgeUrls
 import org.hedgedoc.android.data.HedgeV2Parse
+import org.hedgedoc.android.data.MarkdownTasks
 import org.hedgedoc.android.data.TextOperation
 import org.hedgedoc.android.ui.theme.ScientPalettes
 import org.junit.Assert.assertEquals
@@ -34,6 +35,129 @@ class TextOperationTest {
         val doc = "abcdef"
         val op = TextOperation().retain(2).delete(2).insert("XY").retain(2)
         assertEquals("abXYef", op.apply(doc))
+    }
+
+    @Test
+    fun diffTouchesOnlyTheChangedRun() {
+        val old = "- [ ] water the tomatoes\n- [ ] pick basil\n"
+        val new = "- [x] water the tomatoes\n- [ ] pick basil\n"
+        val op = TextOperation.diff(old, new)
+        assertEquals(new, op.apply(old))
+        assertEquals(listOf<Any>(3, -1, "x", 38), op.toJsonList())
+    }
+
+    @Test
+    fun diffHandlesEmptyEnds() {
+        assertEquals("hello", TextOperation.diff("", "hello").apply(""))
+        assertEquals("", TextOperation.diff("hello", "").apply("hello"))
+        assertTrue(TextOperation.diff("same", "same").isNoop())
+    }
+
+    @Test
+    fun composeMatchesSequentialApply() {
+        val doc = "the quick brown fox"
+        val first = TextOperation.diff(doc, "the quick red fox")
+        val middle = first.apply(doc)
+        val second = TextOperation.diff(middle, "the very quick red fox")
+        val composed = first.compose(second)
+        assertEquals(second.apply(middle), composed.apply(doc))
+        assertEquals(doc.length, composed.baseLength())
+    }
+
+    @Test
+    fun transformConvergesOnConcurrentEdits() {
+        val doc = "hedgedoc"
+        val mine = TextOperation().retain(8).insert(" rocks")
+        val theirs = TextOperation().insert("the ").retain(8)
+        val (minePrime, theirsPrime) = TextOperation.transform(mine, theirs)
+        assertEquals(
+            theirs.compose(minePrime).apply(doc),
+            mine.compose(theirsPrime).apply(doc),
+        )
+        assertEquals("the hedgedoc rocks", mine.compose(theirsPrime).apply(doc))
+    }
+
+    @Test
+    fun transformHandlesOverlappingDeletes() {
+        val doc = "abcdefgh"
+        val mine = TextOperation().retain(2).delete(3).retain(3)
+        val theirs = TextOperation().retain(3).delete(3).retain(2)
+        val (minePrime, theirsPrime) = TextOperation.transform(mine, theirs)
+        assertEquals(
+            theirs.compose(minePrime).apply(doc),
+            mine.compose(theirsPrime).apply(doc),
+        )
+        assertEquals("abgh", mine.compose(theirsPrime).apply(doc))
+    }
+
+    @Test
+    fun jsonRoundTrip() {
+        val op = TextOperation().retain(2).delete(2).insert("XY").retain(2)
+        val back = TextOperation.fromJsonList(op.toJsonList())
+        assertEquals("abXYef", back.apply("abcdef"))
+    }
+}
+
+class MarkdownTasksTest {
+    private val note = """
+        # Garden
+
+        - [ ] water the tomatoes
+        - [x] pick basil
+        1. [ ] numbered task
+
+        ```
+        - [ ] not a task, this is code
+        ```
+
+        - [ ] last one
+    """.trimIndent()
+
+    @Test
+    fun countsOnlyRenderedTasks() {
+        assertEquals(4, MarkdownTasks.count(note))
+    }
+
+    @Test
+    fun togglesTheRequestedBox() {
+        val toggled = MarkdownTasks.toggle(note, 0)!!
+        assertTrue(toggled.contains("- [x] water the tomatoes"))
+        assertTrue(toggled.contains("- [x] pick basil"))
+        assertTrue(MarkdownTasks.isChecked(toggled, 0))
+    }
+
+    @Test
+    fun uncheckingWorksBothWays() {
+        val toggled = MarkdownTasks.toggle(note, 1)!!
+        assertTrue(toggled.contains("- [ ] pick basil"))
+        assertFalse(MarkdownTasks.isChecked(toggled, 1))
+    }
+
+    @Test
+    fun fencedCodeDoesNotShiftTheIndex() {
+        val toggled = MarkdownTasks.toggle(note, 3)!!
+        assertTrue(toggled.contains("- [x] last one"))
+        assertTrue(toggled.contains("- [ ] not a task, this is code"))
+    }
+
+    @Test
+    fun numberedTasksCount() {
+        val toggled = MarkdownTasks.toggle(note, 2)!!
+        assertTrue(toggled.contains("1. [x] numbered task"))
+    }
+
+    @Test
+    fun outOfRangeIsNull() {
+        assertNull(MarkdownTasks.toggle(note, 9))
+        assertNull(MarkdownTasks.toggle(note, -1))
+        assertNull(MarkdownTasks.toggle("no tasks here", 0))
+    }
+
+    @Test
+    fun everythingElseSurvivesUntouched() {
+        val toggled = MarkdownTasks.toggle(note, 0)!!
+        assertEquals(note.lines().size, toggled.lines().size)
+        assertEquals(note.length, toggled.length)
     }
 }
 

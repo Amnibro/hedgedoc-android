@@ -3,6 +3,9 @@ package org.hedgedoc.android.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,7 +16,10 @@ import org.hedgedoc.android.data.AuthMethod
 import org.hedgedoc.android.data.HedgeRepository
 import org.hedgedoc.android.data.HedgeUrls
 import org.hedgedoc.android.data.HistoryNote
+import org.hedgedoc.android.data.LiveStatus
+import org.hedgedoc.android.data.MarkdownTasks
 import org.hedgedoc.android.data.NoteFilter
+import org.hedgedoc.android.data.NoteSession
 import org.hedgedoc.android.data.OpenNote
 import org.hedgedoc.android.data.OutgoingShare
 import org.hedgedoc.android.data.Revision
@@ -28,6 +34,8 @@ sealed class Dest {
     data object Settings : Dest()
 }
 
+enum class SyncState { IDLE, PENDING, SAVING, SAVED, FAILED }
+
 data class UiState(
     val ready: Boolean = false,
     val dest: Dest = Dest.Connect,
@@ -36,7 +44,9 @@ data class UiState(
     val query: String = "",
     val filter: NoteFilter = NoteFilter.ALL,
     val loading: Boolean = false,
-    val saving: Boolean = false,
+    val sync: SyncState = SyncState.IDLE,
+    val liveStatus: LiveStatus? = null,
+    val createdId: String? = null,
     val error: String? = null,
     val note: OpenNote? = null,
     val share: OutgoingShare? = null,
@@ -63,6 +73,13 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
     val http get() = repo.http
+
+    private var live: NoteSession? = null
+    private var liveJob: Job? = null
+    private var autosaveJob: Job? = null
+    private var pendingEdit: PendingEdit? = null
+
+    private data class PendingEdit(val id: String?, val markdown: String, val alias: String?)
 
     fun cookieHeader(): String {
         val server = _state.value.session?.serverUrl ?: return ""
@@ -92,20 +109,29 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
         }
     }
 
+    override fun onCleared() {
+        stopLive()
+        super.onCleared()
+    }
+
     fun consumeShare() { _state.update { it.copy(share = null) } }
     fun consumeSnack() { _state.update { it.copy(snack = null) } }
 
     fun go(dest: Dest) {
+        if (dest is Dest.Notes || dest is Dest.Settings || dest is Dest.Connect) stopLive()
         _state.update { it.copy(dest = dest, error = null) }
     }
 
     fun back() {
-        val dest = when (val current = _state.value.dest) {
-            is Dest.Live -> Dest.Read(current.id)
-            is Dest.Read, is Dest.Edit, Dest.Settings -> Dest.Notes
-            else -> current
+        when (val current = _state.value.dest) {
+            is Dest.Live -> _state.update { it.copy(dest = Dest.Read(current.id), error = null) }
+            is Dest.Edit -> leaveEditor(current)
+            is Dest.Read, Dest.Settings -> {
+                stopLive()
+                _state.update { it.copy(dest = Dest.Notes, error = null, sync = SyncState.IDLE) }
+            }
+            else -> Unit
         }
-        _state.update { it.copy(dest = dest, error = null) }
     }
 
     fun setQuery(value: String) {
@@ -150,8 +176,18 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
     }
 
     fun open(noteId: String) {
+        stopLive()
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null, dest = Dest.Read(noteId), revisions = emptyList()) }
+            _state.update {
+                it.copy(
+                    loading = true,
+                    error = null,
+                    dest = Dest.Read(noteId),
+                    revisions = emptyList(),
+                    sync = SyncState.IDLE,
+                    createdId = null,
+                )
+            }
             try {
                 val note = repo.openNote(noteId)
                 _state.update { it.copy(note = note) }
@@ -159,17 +195,21 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
                 _state.update { it.copy(error = e.message ?: "Could not open note.") }
             } finally {
                 _state.update { it.copy(loading = false) }
+                startLive(noteId)
             }
         }
     }
 
     fun startNew(seed: String = "") {
-        _state.update { it.copy(dest = Dest.Edit(null, seed), note = null, error = null) }
+        stopLive()
+        _state.update {
+            it.copy(dest = Dest.Edit(null, seed), note = null, error = null, createdId = null, sync = SyncState.IDLE)
+        }
     }
 
     fun startEdit() {
         val note = _state.value.note ?: return
-        _state.update { it.copy(dest = Dest.Edit(note.id, note.markdown), error = null) }
+        _state.update { it.copy(dest = Dest.Edit(note.id, note.markdown), error = null, sync = SyncState.IDLE) }
     }
 
     fun openLive(noteId: String = _state.value.note?.id.orEmpty()) {
@@ -177,29 +217,38 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
         _state.update { it.copy(dest = Dest.Live(noteId), error = null) }
     }
 
-    fun save(id: String?, markdown: String, alias: String? = null) {
+    /**
+     * Every keystroke lands here. The write itself waits [AUTOSAVE_DELAY] so a burst of typing is
+     * one operation, the same way the HedgeDoc web editor behaves.
+     */
+    fun edit(id: String?, markdown: String, alias: String?) {
+        pendingEdit = PendingEdit(id, markdown, alias)
+        _state.update { it.copy(sync = SyncState.PENDING) }
+        autosaveJob?.cancel()
+        autosaveJob = viewModelScope.launch {
+            delay(AUTOSAVE_DELAY)
+            commit(id, markdown, alias)
+            pendingEdit = null
+        }
+    }
+
+    fun toggleTask(index: Int) {
+        val note = _state.value.note ?: return
+        val updated = MarkdownTasks.toggle(note.markdown, index) ?: return
+        _state.update { it.copy(note = note.copy(markdown = updated), sync = SyncState.SAVING, error = null) }
         viewModelScope.launch {
-            _state.update { it.copy(saving = true, error = null) }
             try {
-                val noteId = if (id.isNullOrBlank()) {
-                    repo.createNote(markdown, alias)
-                } else {
-                    repo.saveNote(id, markdown)
-                    id
-                }
-                val opened = repo.openNote(noteId)
-                refresh()
+                push(note.id, updated)
+                repo.cacheNote(note.id, updated)
+                _state.update { it.copy(sync = SyncState.SAVED) }
+            } catch (e: Exception) {
                 _state.update {
                     it.copy(
-                        dest = Dest.Read(noteId),
-                        note = opened,
-                        snack = if (id.isNullOrBlank()) "Created" else "Saved",
+                        note = note,
+                        sync = SyncState.FAILED,
+                        error = e.message ?: "Could not save that checkbox.",
                     )
                 }
-            } catch (e: Exception) {
-                _state.update { it.copy(error = e.message ?: "Save failed.") }
-            } finally {
-                _state.update { it.copy(saving = false) }
             }
         }
     }
@@ -221,6 +270,7 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
                 repo.removeFromHistory(noteId)
                 refresh()
                 if ((_state.value.dest as? Dest.Read)?.id == noteId || (_state.value.dest as? Dest.Live)?.id == noteId) {
+                    stopLive()
                     _state.update { it.copy(dest = Dest.Notes, note = null, snack = "Removed from history") }
                 } else {
                     _state.update { it.copy(snack = "Removed from history") }
@@ -234,6 +284,7 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
     fun destroy(noteId: String) {
         viewModelScope.launch {
             try {
+                stopLive()
                 repo.deleteNote(noteId)
                 runCatching { repo.removeFromHistory(noteId) }
                 refresh()
@@ -316,6 +367,11 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
     fun loadPermission() {
         viewModelScope.launch {
             val id = _state.value.note?.id ?: return@launch
+            val known = live?.takeIf { it.noteId == id }?.permission?.value.orEmpty()
+            if (known.isNotBlank()) {
+                _state.update { it.copy(permission = known) }
+                return@launch
+            }
             try {
                 _state.update { it.copy(permission = repo.currentPermission(id)) }
             } catch (e: Exception) {
@@ -363,6 +419,7 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
 
     fun logout() {
         viewModelScope.launch {
+            stopLive()
             val theme = _state.value.themeId
             repo.disconnect()
             _state.update { UiState(ready = true, dest = Dest.Connect, themeId = theme) }
@@ -378,7 +435,144 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
         startNew(text)
     }
 
+    /** Leaving the editor writes whatever the debounce was still holding, before navigating. */
+    private fun leaveEditor(current: Dest.Edit) {
+        autosaveJob?.cancel()
+        autosaveJob = null
+        val outstanding = pendingEdit
+        pendingEdit = null
+        viewModelScope.launch {
+            if (outstanding != null) {
+                commit(outstanding.id, outstanding.markdown, outstanding.alias)
+            }
+            val id = current.id ?: _state.value.createdId
+            if (id.isNullOrBlank()) {
+                stopLive()
+                _state.update { it.copy(dest = Dest.Notes, error = null, sync = SyncState.IDLE) }
+            } else {
+                _state.update { it.copy(dest = Dest.Read(id), error = null) }
+            }
+        }
+    }
+
+    /**
+     * Writes [markdown] and settles the local copy from what we sent, never from a fresh download.
+     * HedgeDoc 1.x holds the note in memory and writes it to the database later, so re-reading here
+     * would hand back the version from before this save.
+     */
+    private suspend fun commit(id: String?, markdown: String, alias: String?) {
+        val target = id ?: _state.value.createdId
+        _state.update { it.copy(sync = SyncState.SAVING, error = null) }
+        try {
+            if (target.isNullOrBlank()) {
+                if (markdown.isBlank()) {
+                    _state.update { it.copy(sync = SyncState.IDLE) }
+                    return
+                }
+                val created = repo.createNote(markdown, alias)
+                val opened = repo.openNote(created, known = markdown)
+                _state.update { it.copy(createdId = created, note = opened, sync = SyncState.SAVED) }
+                startLive(created)
+                refresh()
+                return
+            }
+            push(target, markdown)
+            repo.cacheNote(target, markdown)
+            _state.update { current ->
+                val note = current.note
+                current.copy(
+                    sync = SyncState.SAVED,
+                    note = if (note != null && note.id == target) note.copy(markdown = markdown) else note,
+                )
+            }
+        } catch (e: Exception) {
+            _state.update { it.copy(sync = SyncState.FAILED, error = e.message ?: "Save failed.") }
+        }
+    }
+
+    /** Live socket when we have one, otherwise the plain REST/one-shot-socket write. */
+    private suspend fun push(noteId: String, markdown: String) {
+        val session = live?.takeIf { it.noteId == noteId }
+        if (session != null && session.submit(markdown)) return
+        repo.saveNote(noteId, markdown)
+    }
+
+    private fun startLive(noteId: String) {
+        if (live?.noteId == noteId && liveJob?.isActive == true) return
+        stopLive()
+        liveJob = viewModelScope.launch {
+            val session = runCatching { repo.liveSession(noteId) }.getOrNull()
+            if (session == null) {
+                pollForChanges(noteId)
+                return@launch
+            }
+            live = session
+            session.start()
+            try {
+                coroutineScope {
+                    launch {
+                        session.text.collect { text ->
+                            if (text.isEmpty() && session.status.value != LiveStatus.LIVE) return@collect
+                            _state.update { current ->
+                                val note = current.note
+                                if (note != null && note.id == noteId && note.markdown != text) {
+                                    current.copy(note = note.copy(markdown = text, cached = false))
+                                } else {
+                                    current
+                                }
+                            }
+                            repo.cacheNote(noteId, text)
+                        }
+                    }
+                    launch {
+                        session.status.collect { status ->
+                            _state.update { it.copy(liveStatus = status) }
+                        }
+                    }
+                    launch {
+                        session.permission.collect { value ->
+                            if (value.isNotBlank()) _state.update { it.copy(permission = value) }
+                        }
+                    }
+                }
+            } finally {
+                session.stop()
+                if (live === session) live = null
+            }
+        }
+    }
+
+    /** HedgeDoc 2 has no realtime protocol here, so the reader re-reads on a slow timer instead. */
+    private suspend fun pollForChanges(noteId: String) {
+        while (true) {
+            delay(POLL_DELAY)
+            val current = _state.value
+            if ((current.dest as? Dest.Read)?.id != noteId) continue
+            if (current.sync == SyncState.PENDING || current.sync == SyncState.SAVING) continue
+            val fresh = runCatching { repo.openNote(noteId) }.getOrNull() ?: continue
+            _state.update { latest ->
+                val note = latest.note
+                if (note != null && note.id == noteId && note.markdown != fresh.markdown) {
+                    latest.copy(note = fresh)
+                } else {
+                    latest
+                }
+            }
+        }
+    }
+
+    private fun stopLive() {
+        liveJob?.cancel()
+        liveJob = null
+        live?.stop()
+        live = null
+        _state.update { it.copy(liveStatus = null) }
+    }
+
     companion object {
+        private const val AUTOSAVE_DELAY = 1_200L
+        private const val POLL_DELAY = 6_000L
+
         fun factory(repo: HedgeRepository) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = AppViewModel(repo) as T

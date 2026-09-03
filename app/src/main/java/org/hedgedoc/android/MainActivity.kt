@@ -125,10 +125,13 @@ class MainActivity : ComponentActivity() {
                                 permission = state.permission,
                                 edition = state.session?.edition,
                                 loading = state.loading,
+                                liveStatus = state.liveStatus,
+                                sync = state.sync,
                                 error = state.error,
                                 serverUrl = state.session?.serverUrl.orEmpty(),
                                 http = vm.http,
                                 onBack = vm::back,
+                                onToggleTask = vm::toggleTask,
                                 onEdit = vm::startEdit,
                                 onLive = { vm.openLive(dest.id) },
                                 onShare = vm::shareLink,
@@ -144,14 +147,17 @@ class MainActivity : ComponentActivity() {
                                 onSetPermission = vm::setPermission,
                             )
                             is Dest.Edit -> EditorScreen(
-                                noteId = dest.id,
+                                editKey = dest.id ?: "new",
+                                noteId = dest.id ?: state.createdId,
                                 seed = dest.seed,
-                                saving = state.saving,
+                                sync = state.sync,
+                                liveStatus = state.liveStatus,
+                                remoteText = state.note?.takeIf { it.id == (dest.id ?: state.createdId) }?.markdown,
                                 error = state.error,
                                 serverUrl = state.session?.serverUrl.orEmpty(),
                                 http = vm.http,
                                 onBack = vm::back,
-                                onSave = { markdown, alias -> vm.save(dest.id, markdown, alias) },
+                                onChange = { markdown, alias -> vm.edit(dest.id, markdown, alias) },
                             )
                             is Dest.Live -> {
                                 val server = state.session?.serverUrl.orEmpty()
