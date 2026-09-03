@@ -11,13 +11,16 @@ Connect to a server you host, or `https://demo.hedgedoc.org`. The app asks `/api
 
 ## Install
 
-[Download the latest APK](https://github.com/Amnibro/hedgedoc-android/releases/latest), or the same links from [amni-scient.com/amni-hedgedoc](https://amni-scient.com/amni-hedgedoc.html). Two files:
+[Download the latest APK](https://github.com/Amnibro/hedgedoc-android/releases/latest), or the same links from [amni-scient.com/amni-hedgedoc](https://amni-scient.com/amni-hedgedoc.html).
 
-- **signed** — installable sideload. Signed with the Android debug certificate, so Play Protect may warn. Package `org.hedgedoc.android`.
+- **signed** — installable sideload. Signed with the Android debug certificate, so Play Protect may warn. Package `org.hedgedoc.android`. Every release uses the same certificate, so `-r` upgrades in place.
 - **unsigned** — same release build, no signature. Sign it with your own key if you want.
 
+Each release carries both a versioned name and an unversioned one. The unversioned name always points at the newest release:
+
 ```
-adb install -r hedgedoc-android-1.2.0-signed.apk
+curl -LO https://github.com/Amnibro/hedgedoc-android/releases/latest/download/hedgedoc-android-signed.apk
+adb install -r hedgedoc-android-signed.apk
 ```
 
 Min Android 8.0 (API 26).
