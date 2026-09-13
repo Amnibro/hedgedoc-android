@@ -1,5 +1,8 @@
 package org.hedgedoc.android.data
 
+import org.json.JSONArray
+import org.json.JSONObject
+
 /**
  * ShareJS / HedgeDoc 1.x text operations.
  * Positive Int = retain, negative Int = delete, String = insert.
@@ -228,10 +231,52 @@ class TextOperation {
                         val n = value.toInt()
                         if (n >= 0) op.retain(n) else op.delete(n)
                     }
+                    is JSONObject -> {
+                        when {
+                            value.has("i") -> op.insert(value.optString("i"))
+                            value.has("d") -> op.delete(value.optInt("d"))
+                            value.has("r") -> op.retain(value.optInt("r"))
+                            else -> throw IllegalArgumentException("Unknown operation part: $value")
+                        }
+                    }
                     else -> throw IllegalArgumentException("Unknown operation part: $value")
                 }
             }
             return op
+        }
+
+        /**
+         * Socket.IO delivers HedgeDoc's `operation` event as
+         * `(clientId, ops, selection)`. The Java client sometimes gives ops as a
+         * [JSONArray], sometimes as a [List] or array, so we try every argument
+         * that looks like an op list.
+         */
+        fun fromSocketArgs(args: Array<out Any?>): TextOperation? {
+            for (raw in args) {
+                val list = decodeOpList(raw) ?: continue
+                val parsed = runCatching { fromJsonList(list) }.getOrNull() ?: continue
+                if (parsed.parts.isNotEmpty()) return parsed
+            }
+            return null
+        }
+
+        private fun decodeOpList(raw: Any?): List<Any?>? {
+            return when (raw) {
+                is JSONArray -> (0 until raw.length()).map { raw.opt(it) }
+                is List<*> -> raw
+                is Array<*> -> raw.toList()
+                is JSONObject -> when {
+                    raw.has("ops") -> decodeOpList(raw.opt("ops"))
+                    raw.has("i") || raw.has("d") || raw.has("r") -> listOf(raw)
+                    else -> null
+                }
+                is String -> {
+                    val trimmed = raw.trim()
+                    if (!trimmed.startsWith("[")) null
+                    else decodeOpList(runCatching { JSONArray(trimmed) }.getOrNull())
+                }
+                else -> null
+            }
         }
 
         /**

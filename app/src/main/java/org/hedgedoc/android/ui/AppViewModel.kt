@@ -542,12 +542,12 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
         }
     }
 
-    /** HedgeDoc 2 has no realtime protocol here, so the reader re-reads on a slow timer instead. */
+    /** HedgeDoc 2 has no realtime protocol here, so the open note re-reads on a slow timer instead. */
     private suspend fun pollForChanges(noteId: String) {
         while (true) {
             delay(POLL_DELAY)
             val current = _state.value
-            if ((current.dest as? Dest.Read)?.id != noteId) continue
+            if (!watching(noteId, current.dest)) continue
             if (current.sync == SyncState.PENDING || current.sync == SyncState.SAVING) continue
             val fresh = runCatching { repo.openNote(noteId) }.getOrNull() ?: continue
             _state.update { latest ->
@@ -558,6 +558,14 @@ class AppViewModel(private val repo: HedgeRepository) : ViewModel() {
                     latest
                 }
             }
+        }
+    }
+
+    private fun watching(noteId: String, dest: Dest): Boolean {
+        return when (dest) {
+            is Dest.Read -> dest.id == noteId
+            is Dest.Edit -> (dest.id ?: _state.value.createdId) == noteId
+            else -> false
         }
     }
 

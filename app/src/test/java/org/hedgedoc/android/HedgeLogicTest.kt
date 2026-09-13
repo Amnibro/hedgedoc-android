@@ -96,6 +96,25 @@ class TextOperationTest {
         val back = TextOperation.fromJsonList(op.toJsonList())
         assertEquals("abXYef", back.apply("abcdef"))
     }
+
+    @Test
+    fun socketArgsAcceptJsonArrayInSecondSlot() {
+        val ops = org.json.JSONArray().put(2).put("XY").put(2)
+        val parsed = TextOperation.fromSocketArgs(arrayOf("client-id", ops, org.json.JSONObject()))
+        assertEquals("abXYcd", parsed!!.apply("abcd"))
+    }
+
+    @Test
+    fun socketArgsAcceptJavaList() {
+        val parsed = TextOperation.fromSocketArgs(arrayOf("client-id", listOf(1, "!", 1)))
+        assertEquals("a!b", parsed!!.apply("ab"))
+    }
+
+    @Test
+    fun socketArgsSkipClientIdString() {
+        val parsed = TextOperation.fromSocketArgs(arrayOf("n0tAnOp", org.json.JSONArray().put("hi")))
+        assertEquals("hi", parsed!!.apply(""))
+    }
 }
 
 class MarkdownTasksTest {

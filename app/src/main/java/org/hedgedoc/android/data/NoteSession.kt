@@ -125,37 +125,30 @@ class NoteSession(
     }
 
     private fun onRemoteOperation(args: Array<out Any?>) {
-        val raw = args.getOrNull(1)
-        val array = when (raw) {
-            is JSONArray -> raw
-            is String -> runCatching { JSONArray(raw) }.getOrNull()
-            else -> null
-        } ?: return
-        val incoming = runCatching {
-            TextOperation.fromJsonList((0 until array.length()).map { array.get(it) })
-        }.getOrNull() ?: return
+        val incoming = TextOperation.fromSocketArgs(args) ?: return
         synchronized(lock) {
-            revision++
             val pending = outstanding
-            if (pending == null) {
-                _text.value = runCatching { incoming.apply(_text.value) }.getOrElse { return }
-                return
-            }
-            val (pendingPrime, afterPending) = runCatching {
-                TextOperation.transform(pending, incoming)
-            }.getOrElse { return }
-            val held = buffer
-            if (held == null) {
-                outstanding = pendingPrime
-                _text.value = runCatching { afterPending.apply(_text.value) }.getOrElse { return }
-                return
-            }
-            val (bufferPrime, afterBuffer) = runCatching {
-                TextOperation.transform(held, afterPending)
-            }.getOrElse { return }
-            outstanding = pendingPrime
-            buffer = bufferPrime
-            _text.value = runCatching { afterBuffer.apply(_text.value) }.getOrElse { return }
+            val next = if (pending == null) {
+                runCatching { incoming.apply(_text.value) }.getOrNull()
+            } else {
+                val (pendingPrime, afterPending) = runCatching {
+                    TextOperation.transform(pending, incoming)
+                }.getOrNull() ?: return
+                val held = buffer
+                if (held == null) {
+                    outstanding = pendingPrime
+                    runCatching { afterPending.apply(_text.value) }.getOrNull()
+                } else {
+                    val (bufferPrime, afterBuffer) = runCatching {
+                        TextOperation.transform(held, afterPending)
+                    }.getOrNull() ?: return
+                    outstanding = pendingPrime
+                    buffer = bufferPrime
+                    runCatching { afterBuffer.apply(_text.value) }.getOrNull()
+                }
+            } ?: return
+            revision++
+            _text.value = next
         }
     }
 

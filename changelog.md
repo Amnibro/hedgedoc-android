@@ -1,5 +1,13 @@
 # changelog
 
+## 1.2.1 — 2026-09-03
+
+- Web edits now apply while the note is still open. Socket.IO was handing the operation list as a
+  Java `List` (and sometimes as a JSON array in a different argument slot); those events were
+  dropped, so the phone only caught up on a fresh `doc` after you left and came back.
+- HedgeDoc 2 polling follows the editor as well as the reader.
+- The editor shrinks above the keyboard, so a long note's last lines stay in view while you type.
+
 ## 1.2.0 — 2026-09-02
 
 Live notes without a WebView, and no save button.
